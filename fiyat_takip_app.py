@@ -1,63 +1,65 @@
 import streamlit as st
 import requests
+from bs4 import BeautifulSoup
+import urllib.parse
 
 st.set_page_config(page_title="Canlı Fiyat Takip", layout="wide")
 
 st.title("🔍 Canlı Fiyat Takip & Karşılaştırma")
-st.caption("Trendyol üzerinden doğrudan ürün ve fiyat verilerini çeker.")
+st.caption("Üye olmadan ve API anahtarı kullanmadan canlı fiyat arayın.")
 
 search_query = st.text_input("Aramak istediğiniz ürünün adı:", placeholder="Örn: Grundig Club")
 
-def get_trendyol_products(query):
-    # Trendyol'un arama servisi
-    url = f"https://public.trendyol.com/discovery-web-searchgw-service/v2/api/infinite-scroll/sr?q={query}&culture=tr-TR&storefrontId=1"
+def search_no_api(query):
+    # DuckDuckGo HTML sürümü üzerinden doğrudan mağaza sonuçlarını çeker
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
     }
     
-    products = []
+    # Sadece Türkiye e-ticaret sitelerinde arama yapar
+    target_query = f"{query} fiyatı (site:akakce.com OR site:trendyol.com OR site:hepsiburada.com OR site:n11.com OR site:pazarama.com)"
+    encoded_query = urllib.parse.quote(target_query)
+    url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+    
+    results = []
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.post(
+            "https://html.duckduckgo.com/html/", 
+            data={"q": target_query}, 
+            headers=headers, 
+            timeout=10
+        )
         if response.status_code == 200:
-            data = response.json()
-            result_list = data.get("result", {}).get("products", [])
+            soup = BeautifulSoup(response.text, "html.parser")
+            elements = soup.find_all("a", class_="result__snippet")
             
-            for item in result_list[:10]:
-                brand = item.get("brand", {}).get("name", "")
-                name = item.get("name", "")
-                full_name = f"{brand} {name}".strip()
+            for elem in elements[:10]:
+                title = elem.parent.parent.find("a", class_="result__a").get_text(strip=True) if elem.parent.parent.find("a", class_="result__a") else "Ürün"
+                link = elem.parent.parent.find("a", class_="result__a")["href"]
+                snippet = elem.get_text(strip=True)
                 
-                # Fiyat bilgisi alma
-                price_info = item.get("price", {})
-                price = price_info.get("discountedPrice") or price_info.get("sellingPrice") or 0
-                
-                # Ürün linki
-                link_path = item.get("url", "")
-                full_link = f"https://www.trendyol.com{link_path}" if link_path else "#"
-                
-                products.append({
-                    "Urun": full_name,
-                    "Fiyat": f"{price} TL",
-                    "Link": full_link
+                results.append({
+                    "Urun": title,
+                    "Detay": snippet,
+                    "Link": link
                 })
     except Exception as e:
-        st.error(f"Veri çekilirken hata oluştu: {e}")
+        st.error(f"Arama hatası: {e}")
         
-    return products
+    return results
 
 if st.button("Fiyatları Canlı Ara ve Karşılaştır"):
     if search_query:
-        with st.spinner("Trendyol verileri çekiliyor..."):
-            items = get_trendyol_products(search_query)
+        with st.spinner("Canlı mağaza verileri taranıyor..."):
+            items = search_no_api(search_query)
             if items:
-                st.success(f"'{search_query}' için bulunan canlı Trendyol sonuçları:")
+                st.success(f"'{search_query}' için bulunan canlı mağaza bağlantıları:")
                 for item in items:
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    col1.write(f"**{item['Urun']}**")
-                    col2.write(f"🏷️ **{item['Fiyat']}**")
-                    col3.markdown(f"[👉 Ürüne Git]({item['Link']})")
+                    st.subheader(item['Urun'])
+                    st.write(item['Detay'])
+                    st.markdown(f"[👉 Fiyata / Mağazaya Git]({item['Link']})")
                     st.divider()
             else:
-                st.warning("Ürün bulunamadı veya erişim sağlayan API yanıt vermedi.")
+                st.warning("Sonuç bulunamadı. Lütfen ürün adını değiştirip tekrar deneyin.")
     else:
         st.info("Lütfen bir ürün adı girin.")
