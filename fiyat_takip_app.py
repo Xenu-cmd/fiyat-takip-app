@@ -583,27 +583,21 @@ def priced_results(results):
     for result in results:
 
         if not result["prices"]:
+            result["price"] = None
+        else:
+            result["price"] = min(result["prices"])
 
-            continue
-
-
-        # Sonuçtaki en düşük fiyatı kullan
-        result["price"] = min(
-            result["prices"]
-        )
-
-
-        output.append(
-            result
-        )
-
+        output.append(result)
 
     output.sort(
-        key=lambda x: x["price"]
+        key=lambda x: (
+            x["price"] is None,
+            x["price"] if x["price"] is not None else 999999999
+        )
     )
 
-
     return output
+
 
 
 # =========================================================
