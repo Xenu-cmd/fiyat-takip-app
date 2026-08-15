@@ -425,12 +425,15 @@ def build_queries(product):
 
         "new": [
 
-            f'"{product}" fiyat',
-            f'"{product}" satın al',
             f'"{product}" site:akakce.com',
+            f'"{product}" site:epey.com',
+            f'"{product}" site:cimri.com',
             f'"{product}" site:hepsiburada.com',
             f'"{product}" site:trendyol.com',
-            f'"{product}" site:amazon.com.tr'
+            f'"{product}" site:amazon.com.tr',
+            f'"{product}" site:n11.com',
+            f'"{product}" site:arcelik.com.tr',
+            f'"{product}" site:grundig.com.tr'
 
         ],
 
@@ -438,6 +441,7 @@ def build_queries(product):
 
             f'"{product}" ikinci el',
             f'"{product}" 2.el',
+            f'"{product}" ikinci el site:sahibinden.com',
             f'"{product}" site:sahibinden.com',
             f'"{product}" site:letgo.com'
 
@@ -447,11 +451,13 @@ def build_queries(product):
 
             f'"{product}" yenilenmiş',
             f'"{product}" refurbished',
-            f'"{product}" yenilenmiş fiyat'
+            f'"{product}" yenilenmiş site:hepsiburada.com',
+            f'"{product}" yenilenmiş site:trendyol.com'
 
         ]
 
     }
+
 
 
 # =========================================================
