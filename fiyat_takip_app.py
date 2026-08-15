@@ -1,12 +1,9 @@
 import streamlit as st
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import quote, urljoin
-import re
 
 
 # =========================================================
-# SAYFA
+# SAYFA AYARLARI
 # =========================================================
 
 st.set_page_config(
@@ -24,56 +21,61 @@ st.markdown("""
 <style>
 
 .main-title {
-    text-align:center;
-    font-size:38px;
-    font-weight:800;
-    color:#111827;
+    text-align: center;
+    font-size: 40px;
+    font-weight: 900;
+    color: #111827;
 }
 
 .subtitle {
-    text-align:center;
-    color:#6b7280;
-    margin-bottom:25px;
+    text-align: center;
+    color: #6b7280;
+    margin-bottom: 30px;
 }
 
-.card {
-    padding:18px;
-    border-radius:15px;
-    margin-bottom:12px;
-    border:1px solid #e5e7eb;
-    background:white;
-    box-shadow:0 3px 10px rgba(0,0,0,.05);
+.product-card {
+    padding: 18px;
+    border-radius: 16px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    margin-bottom: 15px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.05);
 }
 
-.new {
-    border-left:6px solid #22c55e;
+.new-card {
+    border-left: 6px solid #22c55e;
 }
 
-.used {
-    border-left:6px solid #f97316;
+.used-card {
+    border-left: 6px solid #f97316;
 }
 
-.refurbished {
-    border-left:6px solid #3b82f6;
+.refurbished-card {
+    border-left: 6px solid #3b82f6;
 }
 
-.price {
-    font-size:27px;
-    font-weight:800;
-    color:#15803d;
+.product-title {
+    font-size: 19px;
+    font-weight: 800;
 }
 
-.store {
-    color:#2563eb;
-    font-weight:700;
+.product-price {
+    font-size: 28px;
+    font-weight: 900;
+    color: #15803d;
 }
 
-.best {
-    padding:22px;
-    border-radius:16px;
-    background:#fefce8;
-    border:2px solid #facc15;
-    margin-bottom:25px;
+.product-store {
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.best-card {
+    background: #fefce8;
+    border: 2px solid #facc15;
+    padding: 25px;
+    border-radius: 18px;
+    margin: 20px 0;
 }
 
 </style>
@@ -91,645 +93,445 @@ st.markdown(
 
 st.markdown(
     '<div class="subtitle">'
-    'Sıfır • İkinci El • Yenilenmiş ürünleri karşılaştır'
+    'Sıfır, ikinci el ve yenilenmiş ürünleri karşılaştır'
     '</div>',
     unsafe_allow_html=True
 )
 
 
 # =========================================================
-# ARAMA
+# API ANAHTARI
 # =========================================================
 
-product = st.text_input(
-    "Ürün adı",
-    placeholder="Örn: Grundig Club"
-)
-
-search = st.button(
-    "🔍 Ürünü Ara",
-    type="primary",
-    use_container_width=True
-)
-
-
-# =========================================================
-# HTTP
-# =========================================================
-
-HEADERS = {
-    "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 "
-        "(KHTML, like Gecko) "
-        "Chrome/131.0 Safari/537.36"
-}
-
-
-# =========================================================
-# FİYAT DÖNÜŞTÜR
-# =========================================================
-
-def price_to_number(value):
-
-    if not value:
-        return None
-
-    value = value.strip()
-
-    value = value.replace("TL", "")
-    value = value.replace("₺", "")
-    value = value.replace(" ", "")
+def get_api_key():
 
     try:
 
-        # 1.799,90
-        if "." in value and "," in value:
+        return st.secrets["SOCIALCRAWL_API_KEY"]
 
-            value = value.replace(".", "")
-            value = value.replace(",", ".")
+    except Exception:
 
-        # 1.799
-        elif "." in value:
-
-            parts = value.split(".")
-
-            if len(parts[-1]) == 3:
-                value = value.replace(".", "")
-
-        # 1799,90
-        elif "," in value:
-
-            value = value.replace(",", ".")
-
-        number = float(value)
-
-        if 1 <= number <= 10000000:
-            return number
-
-    except:
-        pass
-
-    return None
+        return None
 
 
 # =========================================================
-# METİNDEN FİYATLARI BUL
+# SOCIALCRAWL ARAMA
 # =========================================================
 
-def extract_prices(text):
+def search_socialcrawl(product):
 
-    if not text:
-        return []
+    api_key = get_api_key()
 
-    patterns = [
+    if not api_key:
 
-        r'(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)\s*(?:TL|₺)',
-
-        r'(\d{3,7}(?:,\d{1,2})?)\s*(?:TL|₺)',
-
-        r'(?:TL|₺)\s*(\d{3,7}(?:[.,]\d{1,2})?)'
-
-    ]
-
-    prices = []
-
-    for pattern in patterns:
-
-        matches = re.findall(
-            pattern,
-            text,
-            flags=re.IGNORECASE
+        st.error(
+            "❌ SOCIALCRAWL_API_KEY bulunamadı."
         )
 
-        for value in matches:
+        st.info(
+            "Streamlit Secrets bölümüne "
+            "SOCIALCRAWL_API_KEY ekle."
+        )
 
-            number = price_to_number(value)
-
-            if number is not None:
-                prices.append(number)
-
-    return sorted(set(prices))
+        return []
 
 
-# =========================================================
-# ÜRÜN UYGUN MU?
-# =========================================================
-
-def product_match(search_name, title):
-
-    search_words = [
-        x.lower()
-        for x in search_name.split()
-        if len(x) >= 2
-    ]
-
-    title = title.lower()
-
-    if not search_words:
-        return True
-
-    matched = 0
-
-    for word in search_words:
-
-        if word in title:
-            matched += 1
-
-    # Aranan kelimelerin en az yarısı başlıkta olsun
-    return matched >= max(
-        1,
-        len(search_words) // 2
+    url = (
+        "https://www.socialcrawl.dev/"
+        "v1/google_shopping/product-search"
     )
 
 
-# =========================================================
-# AKAKÇE
-# =========================================================
+    params = {
 
-def search_akakce(product):
+        "query": product,
 
-    results = []
+        "country": "Turkey",
 
-    search_url = (
-        "https://www.akakce.com/arama/"
-        "?q=" + quote(product)
-    )
+        "language": "tr",
+
+        "depth": 40
+
+    }
+
+
+    headers = {
+
+        "x-api-key": api_key
+
+    }
+
 
     try:
 
         response = requests.get(
-            search_url,
-            headers=HEADERS,
-            timeout=20
+            url,
+            params=params,
+            headers=headers,
+            timeout=60
         )
 
-        response.raise_for_status()
+    except Exception as e:
 
-    except Exception:
-        return results
-
-
-    soup = BeautifulSoup(
-        response.text,
-        "html.parser"
-    )
-
-
-    # Akakçe arama sayfasındaki bağlantıları bul
-    links = soup.find_all("a")
-
-
-    seen = set()
-
-
-    for link in links:
-
-        title = link.get_text(
-            " ",
-            strip=True
+        st.error(
+            f"API bağlantı hatası: {e}"
         )
 
-        href = link.get(
-            "href",
-            ""
+        return []
+
+
+    if response.status_code != 200:
+
+        st.error(
+            f"SocialCrawl HTTP hatası: "
+            f"{response.status_code}"
         )
 
-
-        if not title or not href:
-            continue
-
-
-        if not product_match(
-            product,
-            title
-        ):
-            continue
-
-
-        if href.startswith("/"):
-
-            href = urljoin(
-                "https://www.akakce.com",
-                href
-            )
-
-
-        if "akakce.com" not in href:
-            continue
-
-
-        if href in seen:
-            continue
-
-
-        seen.add(href)
-
-
-        # Ürün sayfasını aç
         try:
 
-            product_response = requests.get(
-                href,
-                headers=HEADERS,
-                timeout=15
-            )
-
-            product_soup = BeautifulSoup(
-                product_response.text,
-                "html.parser"
-            )
-
-            page_text = product_soup.get_text(
-                " ",
-                strip=True
-            )
-
-            prices = extract_prices(
-                page_text
+            st.code(
+                response.text[:2000]
             )
 
         except:
 
-            prices = []
+            pass
+
+        return []
 
 
-        if not prices:
+    try:
+
+        data = response.json()
+
+    except:
+
+        st.error(
+            "API geçerli JSON döndürmedi."
+        )
+
+        return []
+
+
+    if not data.get("success"):
+
+        st.error(
+            "SocialCrawl araması başarısız."
+        )
+
+        if "error" in data:
+
+            st.code(
+                str(data["error"])
+            )
+
+        return []
+
+
+    return data.get(
+        "data",
+        {}
+    ).get(
+        "items",
+        []
+    )
+
+
+# =========================================================
+# ÜRÜN VERİLERİNİ DÜZENLE
+# =========================================================
+
+def prepare_products(items):
+
+    products = []
+
+
+    for item in items:
+
+        product = item.get(
+            "product",
+            {}
+        )
+
+
+        title = product.get(
+            "title"
+        )
+
+
+        if not title:
+
             continue
 
 
-        # Aşırı fazla rakam varsa ilk birkaç makul fiyatı al
-        prices = [
-            p for p in prices
-            if p >= 50
-        ]
+        price_data = product.get(
+            "price",
+            {}
+        )
 
 
-        if not prices:
+        if not isinstance(
+            price_data,
+            dict
+        ):
+
             continue
 
 
-        results.append({
+        current_price = price_data.get(
+            "current"
+        )
+
+
+        if current_price is None:
+
+            continue
+
+
+        try:
+
+            current_price = float(
+                current_price
+            )
+
+        except:
+
+            continue
+
+
+        currency = price_data.get(
+            "currency",
+            "TRY"
+        )
+
+
+        products.append({
 
             "title": title,
 
-            "price": min(prices),
+            "price": current_price,
 
-            "url": href,
+            "currency": currency,
 
-            "store": "Akakçe",
+            "seller": product.get(
+                "seller",
+                "Bilinmeyen satıcı"
+            ),
 
-            "condition": "Sıfır"
-
-        })
-
-
-        if len(results) >= 10:
-            break
-
-
-    return results
-
-
-# =========================================================
-# EPEY
-# =========================================================
-
-def search_epey(product):
-
-    results = []
-
-    search_url = (
-        "https://www.google.com/search?q="
-        + quote(
-            product +
-            " site:epey.com"
-        )
-    )
-
-    try:
-
-        response = requests.get(
-            search_url,
-            headers=HEADERS,
-            timeout=20
-        )
-
-        response.raise_for_status()
-
-    except:
-
-        return results
-
-
-    soup = BeautifulSoup(
-        response.text,
-        "html.parser"
-    )
-
-
-    for link in soup.find_all("a"):
-
-        href = link.get(
-            "href",
-            ""
-        )
-
-        text = link.get_text(
-            " ",
-            strip=True
-        )
-
-
-        if "epey.com" not in href:
-            continue
-
-
-        if not product_match(
-            product,
-            text
-        ):
-            continue
-
-
-        # Epey sayfasını aç
-        try:
-
-            page = requests.get(
-                href,
-                headers=HEADERS,
-                timeout=15
-            )
-
-            page_soup = BeautifulSoup(
-                page.text,
-                "html.parser"
-            )
-
-            page_text = page_soup.get_text(
-                " ",
-                strip=True
-            )
-
-            prices = extract_prices(
-                page_text
-            )
-
-        except:
-
-            continue
-
-
-        if not prices:
-            continue
-
-
-        results.append({
-
-            "title": text[:150],
-
-            "price": min(prices),
-
-            "url": href,
-
-            "store": "Epey",
-
-            "condition": "Sıfır"
-
-        })
-
-
-        if len(results) >= 10:
-            break
-
-
-    return results
-
-
-# =========================================================
-# GENEL WEB ARAMASI
-# =========================================================
-
-def search_web(product, condition):
-
-    results = []
-
-
-    if condition == "İkinci El":
-
-        queries = [
-            f'"{product}" ikinci el',
-            f'"{product}" 2.el',
-            f'"{product}" site:sahibinden.com',
-            f'"{product}" site:letgo.com'
-        ]
-
-    elif condition == "Yenilenmiş":
-
-        queries = [
-            f'"{product}" yenilenmiş',
-            f'"{product}" refurbished'
-        ]
-
-    else:
-
-        queries = [
-            f'"{product}" fiyat',
-            f'"{product}" satın al'
-        ]
-
-
-    for query in queries:
-
-        url = (
-            "https://html.duckduckgo.com/html/"
-        )
-
-
-        try:
-
-            response = requests.get(
-                url,
-                params={"q": query},
-                headers=HEADERS,
-                timeout=15
-            )
-
-            response.raise_for_status()
-
-        except:
-
-            continue
-
-
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
-        )
-
-
-        for item in soup.select(
-            ".result"
-        ):
-
-            link = item.select_one(
-                ".result__a"
-            )
-
-            snippet = item.select_one(
-                ".result__snippet"
-            )
-
-
-            if not link:
-                continue
-
-
-            title = link.get_text(
-                " ",
-                strip=True
-            )
-
-            href = link.get(
-                "href",
+            "url": product.get(
+                "url",
                 ""
-            )
+            ),
 
-
-            description = ""
-
-            if snippet:
-
-                description = snippet.get_text(
-                    " ",
-                    strip=True
+            "image": (
+                product.get(
+                    "image_urls",
+                    []
+                )[0]
+                if product.get(
+                    "image_urls",
+                    []
                 )
+                else ""
+            ),
 
+            "rating": (
+                product.get(
+                    "rating",
+                    {}
+                ).get(
+                    "average"
+                )
+                if isinstance(
+                    product.get(
+                        "rating",
+                        {}
+                    ),
+                    dict
+                )
+                else None
+            ),
 
-            combined = (
-                title + " " +
-                description
+            "rating_count": (
+                product.get(
+                    "rating",
+                    {}
+                ).get(
+                    "count"
+                )
+                if isinstance(
+                    product.get(
+                        "rating",
+                        {}
+                    ),
+                    dict
+                )
+                else None
+            ),
+
+            "availability": product.get(
+                "availability"
             )
 
-
-            if not product_match(
-                product,
-                combined
-            ):
-                continue
+        })
 
 
-            prices = extract_prices(
-                combined
-            )
-
-
-            if not prices:
-                continue
-
-
-            results.append({
-
-                "title": title,
-
-                "price": min(prices),
-
-                "url": href,
-
-                "store": (
-                    href.split("//")[-1]
-                    .split("/")[0]
-                    .replace("www.", "")
-                ),
-
-                "condition": condition
-
-            })
-
-
-    return results
-
-
-# =========================================================
-# TEKRARLARI SİL
-# =========================================================
-
-def unique_results(results):
+    # Aynı ürün + satıcı + fiyat tekrarlarını temizle
 
     unique = {}
 
-    for item in results:
+    for product in products:
 
         key = (
-            item["url"],
-            item["price"]
+            product["title"].lower(),
+            product["seller"].lower(),
+            product["price"]
         )
 
         if key not in unique:
 
-            unique[key] = item
+            unique[key] = product
 
 
-    results = list(
+    products = list(
         unique.values()
     )
 
 
-    results.sort(
+    # En ucuzdan pahalıya sırala
+
+    products.sort(
         key=lambda x: x["price"]
     )
 
 
-    return results
+    return products
+
+
+# =========================================================
+# İKİNCİ EL / YENİLENMİŞ TESPİTİ
+# =========================================================
+
+def detect_condition(product):
+
+    text = (
+        product["title"] + " " +
+        str(product["seller"])
+    ).lower()
+
+
+    used_words = [
+
+        "ikinci el",
+        "2.el",
+        "2 el",
+        "used",
+        "pre-owned",
+        "preowned",
+        "kullanılmış"
+
+    ]
+
+
+    refurbished_words = [
+
+        "yenilenmiş",
+        "refurbished",
+        "renewed"
+
+    ]
+
+
+    for word in refurbished_words:
+
+        if word in text:
+
+            return "Yenilenmiş"
+
+
+    for word in used_words:
+
+        if word in text:
+
+            return "İkinci El"
+
+
+    return "Sıfır"
+
+
+# =========================================================
+# PARA BİRİMİ
+# =========================================================
+
+def format_price(price, currency):
+
+    if currency == "TRY":
+
+        return f"{price:,.2f} TL"
+
+    if currency == "USD":
+
+        return f"${price:,.2f}"
+
+    if currency == "EUR":
+
+        return f"€{price:,.2f}"
+
+    return f"{price:,.2f} {currency}"
 
 
 # =========================================================
 # SONUÇ KARTI
 # =========================================================
 
-def show_results(
-    title,
-    emoji,
-    results,
-    css
+def show_product(
+    product,
+    card_class
 ):
 
-    st.subheader(
-        f"{emoji} {title}"
+    price = format_price(
+        product["price"],
+        product["currency"]
     )
 
 
-    if not results:
-
-        st.info(
-            "Bu kategoride sonuç bulunamadı."
-        )
-
-        return
+    col1, col2 = st.columns(
+        [1, 4]
+    )
 
 
-    for index, item in enumerate(
-        results[:15],
-        1
-    ):
+    with col1:
+
+        if product["image"]:
+
+            try:
+
+                st.image(
+                    product["image"],
+                    width=150
+                )
+
+            except:
+
+                pass
+
+
+    with col2:
 
         st.markdown(
             f"""
-            <div class="card {css}">
+            <div class="product-card {card_class}">
 
-                <div style="
-                    font-size:18px;
-                    font-weight:700;
-                ">
-                    {index}. {item["title"]}
+                <div class="product-title">
+                    {product["title"]}
                 </div>
 
-                <div class="store">
-                    🏪 {item["store"]}
+                <div class="product-price">
+                    {price}
                 </div>
 
-                <div class="price">
-                    {item["price"]:,.2f} TL
+                <div class="product-store">
+                    🏪 {product["seller"]}
                 </div>
 
             </div>
@@ -738,19 +540,55 @@ def show_results(
         )
 
 
-        st.link_button(
-            "🔗 Ürüne Git",
-            item["url"]
-        )
+        if product["rating"]:
+
+            rating_text = (
+                f"⭐ {product['rating']}"
+            )
+
+            if product["rating_count"]:
+
+                rating_text += (
+                    f" ({product['rating_count']:,} değerlendirme)"
+                )
+
+            st.write(
+                rating_text
+            )
+
+
+        if product["url"]:
+
+            st.link_button(
+                "🛒 Ürüne Git",
+                product["url"]
+            )
 
 
 # =========================================================
-# ÇALIŞTIR
+# ARAMA KUTUSU
 # =========================================================
 
-if search:
+product_name = st.text_input(
+    "🔎 Ürün adı",
+    placeholder="Örn: Grundig Club"
+)
 
-    if not product.strip():
+
+search_button = st.button(
+    "🔍 Fiyatları Ara",
+    type="primary",
+    use_container_width=True
+)
+
+
+# =========================================================
+# ARAMA
+# =========================================================
+
+if search_button:
+
+    if not product_name.strip():
 
         st.warning(
             "Lütfen bir ürün adı yaz."
@@ -759,118 +597,109 @@ if search:
         st.stop()
 
 
-    product = product.strip()
+    product_name = product_name.strip()
 
 
     with st.spinner(
-        f'"{product}" araştırılıyor...'
+        f'"{product_name}" aranıyor...'
     ):
 
-        # -----------------------------------------
-        # SIFIR
-        # -----------------------------------------
-
-        new_results = []
-
-        new_results.extend(
-            search_akakce(product)
-        )
-
-        new_results.extend(
-            search_epey(product)
-        )
-
-        new_results.extend(
-            search_web(
-                product,
-                "Sıfır"
-            )
+        raw_items = search_socialcrawl(
+            product_name
         )
 
 
-        # -----------------------------------------
-        # İKİNCİ EL
-        # -----------------------------------------
-
-        used_results = search_web(
-            product,
-            "İkinci El"
-        )
-
-
-        # -----------------------------------------
-        # YENİLENMİŞ
-        # -----------------------------------------
-
-        refurbished_results = search_web(
-            product,
-            "Yenilenmiş"
-        )
-
-
-    new_results = unique_results(
-        new_results
+    products = prepare_products(
+        raw_items
     )
 
-    used_results = unique_results(
-        used_results
-    )
 
-    refurbished_results = unique_results(
-        refurbished_results
-    )
+    if not products:
+
+        st.error(
+            f'"{product_name}" için ürün bulunamadı.'
+        )
+
+        st.write(
+            "API sonuç döndürmedi. "
+            "Ürün adını model numarasıyla birlikte "
+            "deneyebilirsin."
+        )
+
+        st.stop()
+
+
+    # =====================================================
+    # KATEGORİLER
+    # =====================================================
+
+    for item in products:
+
+        item["condition"] = detect_condition(
+            item
+        )
+
+
+    new_products = [
+        x for x in products
+        if x["condition"] == "Sıfır"
+    ]
+
+
+    used_products = [
+        x for x in products
+        if x["condition"] == "İkinci El"
+    ]
+
+
+    refurbished_products = [
+        x for x in products
+        if x["condition"] == "Yenilenmiş"
+    ]
 
 
     # =====================================================
     # EN UCUZ
     # =====================================================
 
-    all_results = (
-        new_results +
-        used_results +
-        refurbished_results
-    )
+    cheapest = products[0]
 
 
-    if all_results:
+    st.markdown(
+        f"""
+        <div class="best-card">
 
-        cheapest = min(
-            all_results,
-            key=lambda x: x["price"]
-        )
+            <h2>🏆 En Ucuz Fiyat</h2>
 
-
-        st.markdown(
-            f"""
-            <div class="best">
-
-                <h2>💰 Bulunan En Ucuz</h2>
-
-                <div style="
-                    font-size:21px;
-                    font-weight:700;
-                ">
-                    {cheapest["title"]}
-                </div>
-
-                <div style="
-                    font-size:36px;
-                    font-weight:900;
-                    color:#15803d;
-                ">
-                    {cheapest["price"]:,.2f} TL
-                </div>
-
-                <div>
-                    🏪 {cheapest["store"]}
-                    <br>
-                    📦 {cheapest["condition"]}
-                </div>
-
+            <div style="
+                font-size:22px;
+                font-weight:800;
+            ">
+                {cheapest["title"]}
             </div>
-            """,
-            unsafe_allow_html=True
-        )
+
+            <div style="
+                font-size:38px;
+                font-weight:900;
+                color:#15803d;
+            ">
+                {format_price(
+                    cheapest["price"],
+                    cheapest["currency"]
+                )}
+            </div>
+
+            <div style="
+                font-size:17px;
+                margin-top:8px;
+            ">
+                🏪 {cheapest["seller"]}
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
     # =====================================================
@@ -882,37 +711,89 @@ if search:
 
     with col1:
 
-        st.metric(
-            "🟢 Sıfır",
-            (
-                f"{new_results[0]['price']:,.2f} TL"
-                if new_results
-                else "-"
+        if new_products:
+
+            st.metric(
+                "🟢 Sıfır",
+                format_price(
+                    new_products[0]["price"],
+                    new_products[0]["currency"]
+                )
             )
-        )
+
+        else:
+
+            st.metric(
+                "🟢 Sıfır",
+                "Bulunamadı"
+            )
 
 
     with col2:
 
-        st.metric(
-            "🟠 İkinci El",
-            (
-                f"{used_results[0]['price']:,.2f} TL"
-                if used_results
-                else "-"
+        if used_products:
+
+            st.metric(
+                "🟠 İkinci El",
+                format_price(
+                    used_products[0]["price"],
+                    used_products[0]["currency"]
+                )
             )
-        )
+
+        else:
+
+            st.metric(
+                "🟠 İkinci El",
+                "Bulunamadı"
+            )
 
 
     with col3:
 
-        st.metric(
-            "🔵 Yenilenmiş",
-            (
-                f"{refurbished_results[0]['price']:,.2f} TL"
-                if refurbished_results
-                else "-"
+        if refurbished_products:
+
+            st.metric(
+                "🔵 Yenilenmiş",
+                format_price(
+                    refurbished_products[0]["price"],
+                    refurbished_products[0]["currency"]
+                )
             )
+
+        else:
+
+            st.metric(
+                "🔵 Yenilenmiş",
+                "Bulunamadı"
+            )
+
+
+    st.divider()
+
+
+    # =====================================================
+    # SIFIR
+    # =====================================================
+
+    st.header(
+        "🟢 Sıfır Ürünler"
+    )
+
+
+    if new_products:
+
+        for item in new_products:
+
+            show_product(
+                item,
+                "new-card"
+            )
+
+    else:
+
+        st.info(
+            "Sıfır ürün bulunamadı."
         )
 
 
@@ -920,41 +801,65 @@ if search:
 
 
     # =====================================================
-    # SONUÇLAR
+    # İKİNCİ EL
     # =====================================================
 
-    show_results(
-        "Sıfır Ürünler",
-        "🟢",
-        new_results,
-        "new"
+    st.header(
+        "🟠 İkinci El"
     )
 
 
-    st.divider()
+    if used_products:
 
+        for item in used_products:
 
-    show_results(
-        "İkinci El",
-        "🟠",
-        used_results,
-        "used"
-    )
+            show_product(
+                item,
+                "used-card"
+            )
 
+    else:
 
-    st.divider()
-
-
-    show_results(
-        "Yenilenmiş",
-        "🔵",
-        refurbished_results,
-        "refurbished"
-    )
-
-
-    if not all_results:
-
-        st.error(
-            f'"{product}" için sonuç bulunamadı.'
+        st.info(
+            "Bu aramada ikinci el sonuç bulunamadı."
         )
+
+
+    st.divider()
+
+
+    # =====================================================
+    # YENİLENMİŞ
+    # =====================================================
+
+    st.header(
+        "🔵 Yenilenmiş"
+    )
+
+
+    if refurbished_products:
+
+        for item in refurbished_products:
+
+            show_product(
+                item,
+                "refurbished-card"
+            )
+
+
+    else:
+
+        st.info(
+            "Bu aramada yenilenmiş sonuç bulunamadı."
+        )
+
+
+    # =====================================================
+    # API BİLGİSİ
+    # =====================================================
+
+    st.divider()
+
+    st.caption(
+        f"🔎 {len(products)} fiyat sonucu bulundu."
+    )
