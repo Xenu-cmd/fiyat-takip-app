@@ -241,10 +241,16 @@ def search_socialcrawl(product):
 # ÜRÜN VERİLERİNİ DÜZENLE
 # =========================================================
 
-def prepare_products(items):
+def prepare_products(items, search_query):
 
     products = []
 
+    # Aranan ürünün kelimelerini oluştur
+    search_words = [
+        word.lower().strip()
+        for word in search_query.split()
+        if len(word.strip()) >= 2
+    ]
 
     for item in items:
 
@@ -253,40 +259,61 @@ def prepare_products(items):
             {}
         )
 
-
         title = product.get(
-            "title"
+            "title",
+            ""
         )
 
-
         if not title:
-
             continue
 
+        # -------------------------------------------------
+        # ÜRÜN RELEVANS KONTROLÜ
+        # -------------------------------------------------
+
+        title_lower = title.lower()
+
+        matched_words = 0
+
+        for word in search_words:
+
+            if word in title_lower:
+                matched_words += 1
+
+        # Aranan kelimelerin en az %50'si ürün isminde
+        # bulunmuyorsa sonucu alma.
+
+        if search_words:
+
+            match_ratio = (
+                matched_words /
+                len(search_words)
+            )
+
+            if match_ratio < 0.50:
+                continue
+
+        # -------------------------------------------------
+        # FİYAT
+        # -------------------------------------------------
 
         price_data = product.get(
             "price",
             {}
         )
 
-
         if not isinstance(
             price_data,
             dict
         ):
-
             continue
-
 
         current_price = price_data.get(
             "current"
         )
 
-
         if current_price is None:
-
             continue
-
 
         try:
 
@@ -298,12 +325,58 @@ def prepare_products(items):
 
             continue
 
+        # -------------------------------------------------
+        # PARA BİRİMİ
+        # -------------------------------------------------
 
         currency = price_data.get(
             "currency",
             "TRY"
         )
 
+        # -------------------------------------------------
+        # ÜRÜN
+        # -------------------------------------------------
+
+        image_urls = product.get(
+            "image_urls",
+            []
+        )
+
+        image = ""
+
+        if image_urls:
+
+            image = image_urls[0]
+
+        # -------------------------------------------------
+        # PUAN
+        # -------------------------------------------------
+
+        rating_data = product.get(
+            "rating",
+            {}
+        )
+
+        rating = None
+        rating_count = None
+
+        if isinstance(
+            rating_data,
+            dict
+        ):
+
+            rating = rating_data.get(
+                "average"
+            )
+
+            rating_count = rating_data.get(
+                "count"
+            )
+
+        # -------------------------------------------------
+        # ÜRÜNÜ EKLE
+        # -------------------------------------------------
 
         products.append({
 
@@ -323,51 +396,11 @@ def prepare_products(items):
                 ""
             ),
 
-            "image": (
-                product.get(
-                    "image_urls",
-                    []
-                )[0]
-                if product.get(
-                    "image_urls",
-                    []
-                )
-                else ""
-            ),
+            "image": image,
 
-            "rating": (
-                product.get(
-                    "rating",
-                    {}
-                ).get(
-                    "average"
-                )
-                if isinstance(
-                    product.get(
-                        "rating",
-                        {}
-                    ),
-                    dict
-                )
-                else None
-            ),
+            "rating": rating,
 
-            "rating_count": (
-                product.get(
-                    "rating",
-                    {}
-                ).get(
-                    "count"
-                )
-                if isinstance(
-                    product.get(
-                        "rating",
-                        {}
-                    ),
-                    dict
-                )
-                else None
-            ),
+            "rating_count": rating_count,
 
             "availability": product.get(
                 "availability"
@@ -375,8 +408,9 @@ def prepare_products(items):
 
         })
 
-
-    # Aynı ürün + satıcı + fiyat tekrarlarını temizle
+    # -----------------------------------------------------
+    # TEKRARLARI TEMİZLE
+    # -----------------------------------------------------
 
     unique = {}
 
@@ -392,20 +426,20 @@ def prepare_products(items):
 
             unique[key] = product
 
-
     products = list(
         unique.values()
     )
 
-
-    # En ucuzdan pahalıya sırala
+    # -----------------------------------------------------
+    # EN UCUZDAN PAHALIYA
+    # -----------------------------------------------------
 
     products.sort(
         key=lambda x: x["price"]
     )
 
-
     return products
+
 
 
 # =========================================================
