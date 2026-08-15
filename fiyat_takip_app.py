@@ -148,7 +148,6 @@ def extract_prices(text):
 
     prices = []
 
-    # Öncelikle TL / ₺ ile açıkça belirtilen fiyatları ara
     patterns = [
         r'(\d{1,3}(?:[.\s]\d{3})+(?:,\d{1,2})?)\s*(?:TL|₺)',
         r'(\d{3,6}(?:,\d{1,2})?)\s*(?:TL|₺)',
@@ -165,27 +164,15 @@ def extract_prices(text):
 
         for value in matches:
 
-            value = value.strip()
-
             try:
 
-                # 2.999,90
-                if "." in value and "," in value:
+                value = value.strip()
 
+                if "." in value and "," in value:
                     value = value.replace(".", "")
                     value = value.replace(",", ".")
 
-                # 2.999
-                elif "." in value:
-
-                    parts = value.split(".")
-
-                    if len(parts[-1]) == 3:
-                        value = value.replace(".", "")
-
-                # 2,999 veya 2999,90
                 elif "," in value:
-
                     parts = value.split(",")
 
                     if len(parts[-1]) == 2:
@@ -193,19 +180,23 @@ def extract_prices(text):
                     else:
                         value = value.replace(",", "")
 
+                elif "." in value:
+                    parts = value.split(".")
+
+                    if len(parts[-1]) == 3:
+                        value = value.replace(".", "")
+
                 number = float(value)
 
-                # Elektronik ürünlerde aşırı düşük
-                # ve aşırı yüksek rakamları ele
-                if 300 <= number <= 1000000:
-
+                # Çok geniş aralık bırakıyoruz
+                if 1 <= number <= 10000000:
                     prices.append(number)
 
             except:
-
                 continue
 
     return sorted(list(set(prices)))
+
 
 
 # =========================================================
