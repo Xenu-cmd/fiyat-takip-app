@@ -643,9 +643,11 @@ if search_button:
         )
 
 
-    products = prepare_products(
-        raw_items
-    )
+      products = prepare_products(
+    raw_items,
+    product_name
+)
+
 
 
     if not products:
