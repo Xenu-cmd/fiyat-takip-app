@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 
 # =========================================================
-# SAYFA
+# AYARLAR
 # =========================================================
 
 st.set_page_config(
@@ -15,9 +15,22 @@ st.set_page_config(
     layout="wide"
 )
 
+BASE_URL = "https://www.socialcrawl.dev"
+
+try:
+    API_KEY = st.secrets["SOCIALCRAWL_API_KEY"]
+except Exception:
+    API_KEY = ""
+
+
+HEADERS = {
+    "x-api-key": API_KEY,
+    "Accept": "application/json"
+}
+
 
 # =========================================================
-# CSS
+# TASARIM
 # =========================================================
 
 st.markdown("""
@@ -28,39 +41,45 @@ st.markdown("""
     font-size:40px;
     font-weight:900;
     color:#111827;
+    margin-top:10px;
 }
 
 .subtitle {
     text-align:center;
     color:#6b7280;
-    margin-bottom:30px;
+    margin-bottom:28px;
 }
 
 .best-card {
-    background:linear-gradient(135deg,#ecfdf5,#f0fdf4);
+    background:linear-gradient(
+        135deg,
+        #ecfdf5,
+        #f0fdf4
+    );
+
     border:2px solid #22c55e;
     border-radius:20px;
-    padding:26px;
+    padding:25px;
     margin:20px 0;
 }
 
 .best-title {
+    color:#166534;
     font-size:20px;
     font-weight:900;
-    color:#166534;
 }
 
 .best-product {
+    color:#111827;
     font-size:25px;
     font-weight:900;
     margin-top:8px;
-    color:#111827;
 }
 
 .best-price {
-    font-size:44px;
-    font-weight:900;
     color:#15803d;
+    font-size:42px;
+    font-weight:900;
     margin-top:8px;
 }
 
@@ -75,10 +94,10 @@ st.markdown("""
 }
 
 .offer {
-    background:#ffffff;
+    background:#fff;
     border-radius:15px;
     padding:18px;
-    margin-bottom:10px;
+    margin-bottom:12px;
     border:1px solid #e5e7eb;
     box-shadow:0 3px 12px rgba(0,0,0,.04);
 }
@@ -98,11 +117,10 @@ st.markdown("""
 .offer-title {
     font-size:18px;
     font-weight:800;
-    color:#111827;
 }
 
 .offer-price {
-    font-size:29px;
+    font-size:28px;
     font-weight:900;
     margin-top:5px;
 }
@@ -115,15 +133,15 @@ st.markdown("""
 
 .offer-condition {
     color:#6b7280;
-    margin-top:5px;
     font-size:14px;
+    margin-top:5px;
 }
 
-.empty-box {
-    padding:15px;
-    border-radius:12px;
+.source-card {
     background:#f9fafb;
-    color:#6b7280;
+    border-radius:12px;
+    padding:12px;
+    margin:5px 0;
 }
 
 </style>
@@ -131,36 +149,19 @@ st.markdown("""
 
 
 # =========================================================
-# API KEY
-# =========================================================
-
-try:
-    API_KEY = st.secrets["SOCIALCRAWL_API_KEY"]
-except Exception:
-    API_KEY = ""
-
-
-HEADERS = {
-    "x-api-key": API_KEY,
-    "Accept": "application/json"
-}
-
-
-BASE_URL = "https://www.socialcrawl.dev"
-
-
-# =========================================================
 # BAŞLIK
 # =========================================================
 
 st.markdown(
-    '<div class="main-title">🔎 Akıllı Fiyat Karşılaştırma</div>',
+    '<div class="main-title">'
+    '🔎 Akıllı Fiyat Karşılaştırma'
+    '</div>',
     unsafe_allow_html=True
 )
 
 st.markdown(
     '<div class="subtitle">'
-    'Sıfır, ikinci el ve yenilenmiş ürünleri karşılaştır'
+    'Sıfır • İkinci El • Yenilenmiş'
     '</div>',
     unsafe_allow_html=True
 )
@@ -176,14 +177,14 @@ product = st.text_input(
 )
 
 search_button = st.button(
-    "🔍 Fiyatları Bul",
+    "🔍 Fiyatları Ara",
     type="primary",
     use_container_width=True
 )
 
 
 # =========================================================
-# YARDIMCILAR
+# METİN TEMİZLE
 # =========================================================
 
 def normalize(text):
@@ -202,8 +203,8 @@ def normalize(text):
         "ü": "u"
     }
 
-    for a, b in replacements.items():
-        text = text.replace(a, b)
+    for old, new in replacements.items():
+        text = text.replace(old, new)
 
     text = re.sub(
         r"[^a-z0-9\s]",
@@ -220,7 +221,11 @@ def normalize(text):
     return text.strip()
 
 
-def words_of(product):
+# =========================================================
+# ÜRÜN KELİMELERİ
+# =========================================================
+
+def product_words(product):
 
     stop_words = {
         "ve",
@@ -229,22 +234,84 @@ def words_of(product):
         "bir",
         "the",
         "for",
-        "bluetooth"
+        "satin",
+        "al"
     }
 
     return [
-        x
-        for x in normalize(product).split()
-        if len(x) >= 2
-        and x not in stop_words
+        word
+        for word in normalize(product).split()
+        if len(word) >= 2
+        and word not in stop_words
     ]
 
 
-def domain_of(url):
+# =========================================================
+# ALÂKA KONTROLÜ
+# =========================================================
+
+def relevance_score(
+    product,
+    title,
+    description=""
+):
+
+    text = normalize(
+        str(title)
+        + " "
+        + str(description)
+    )
+
+    words = product_words(
+        product
+    )
+
+    score = 0
+
+    for word in words:
+
+        if word in text:
+            score += 1
+
+    return score
+
+
+def is_relevant(
+    product,
+    title,
+    description=""
+):
+
+    words = product_words(
+        product
+    )
+
+    score = relevance_score(
+        product,
+        title,
+        description
+    )
+
+    if len(words) <= 2:
+        return score >= len(words)
+
+    if len(words) == 3:
+        return score >= 2
+
+    return score >= 3
+
+
+# =========================================================
+# DOMAIN
+# =========================================================
+
+def get_domain(url):
 
     try:
 
-        domain = urlparse(url).netloc.lower()
+        domain = urlparse(
+            url
+        ).netloc.lower()
 
         if domain.startswith("www."):
             domain = domain[4:]
@@ -255,31 +322,60 @@ def domain_of(url):
         return ""
 
 
-def store_name(url):
+# =========================================================
+# MAĞAZA ADI
+# =========================================================
 
-    domain = domain_of(url)
+def get_store_name(
+    url,
+    fallback=""
+):
+
+    domain = get_domain(
+        url
+    )
 
     stores = {
-        "akakce.com": "Akakçe",
-        "cimri.com": "Cimri",
-        "hepsiburada.com": "Hepsiburada",
-        "trendyol.com": "Trendyol",
-        "n11.com": "N11",
-        "amazon.com.tr": "Amazon",
-        "dolap.com": "Dolap",
-        "sahibinden.com": "Sahibinden",
-        "letgo.com": "Letgo",
-        "grundig.com.tr": "Grundig"
+
+        "akakce.com":
+            "Akakçe",
+
+        "cimri.com":
+            "Cimri",
+
+        "hepsiburada.com":
+            "Hepsiburada",
+
+        "trendyol.com":
+            "Trendyol",
+
+        "n11.com":
+            "N11",
+
+        "amazon.com.tr":
+            "Amazon Türkiye",
+
+        "dolap.com":
+            "Dolap",
+
+        "sahibinden.com":
+            "Sahibinden",
+
+        "letgo.com":
+            "Letgo",
+
+        "grundig.com.tr":
+            "Grundig"
     }
 
     return stores.get(
         domain,
-        domain or "Mağaza"
+        fallback or domain or "Mağaza"
     )
 
 
 # =========================================================
-# FİYAT AYIKLA
+# FİYAT BUL
 # =========================================================
 
 def extract_prices(text):
@@ -288,27 +384,35 @@ def extract_prices(text):
         return []
 
     text = str(text)
-    text = text.replace("\xa0", " ")
+
+    text = text.replace(
+        "\xa0",
+        " "
+    )
 
     patterns = [
 
+        # 1.999,00 TL
         r'(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)\s*(?:TL|₺)',
 
-        r'(\d{1,7}(?:,\d{1,2})?)\s*(?:TL|₺)',
+        # 1999,00 TL
+        r'(\d{2,7}(?:,\d{1,2})?)\s*(?:TL|₺)',
 
+        # TL 1.999,00
         r'(?:TL|₺)\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)',
 
-        r'(?:TL|₺)\s*(\d{1,7}(?:,\d{1,2})?)'
+        # TL 1999
+        r'(?:TL|₺)\s*(\d{2,7}(?:,\d{1,2})?)'
     ]
 
-    output = []
+    prices = []
 
     for pattern in patterns:
 
         matches = re.findall(
             pattern,
             text,
-            re.IGNORECASE
+            flags=re.IGNORECASE
         )
 
         for value in matches:
@@ -319,8 +423,15 @@ def extract_prices(text):
 
                 if "." in value and "," in value:
 
-                    value = value.replace(".", "")
-                    value = value.replace(",", ".")
+                    value = value.replace(
+                        ".",
+                        ""
+                    )
+
+                    value = value.replace(
+                        ",",
+                        "."
+                    )
 
                 elif "," in value:
 
@@ -328,11 +439,17 @@ def extract_prices(text):
 
                     if len(parts[-1]) <= 2:
 
-                        value = value.replace(",", ".")
+                        value = value.replace(
+                            ",",
+                            "."
+                        )
 
                     else:
 
-                        value = value.replace(",", "")
+                        value = value.replace(
+                            ",",
+                            ""
+                        )
 
                 elif "." in value:
 
@@ -340,70 +457,27 @@ def extract_prices(text):
 
                     if len(parts[-1]) == 3:
 
-                        value = value.replace(".", "")
+                        value = value.replace(
+                            ".",
+                            ""
+                        )
 
-                number = float(value)
+                number = float(
+                    value
+                )
 
                 if 1 <= number <= 10_000_000:
 
-                    output.append(number)
+                    prices.append(
+                        number
+                    )
 
             except Exception:
                 pass
 
-    return sorted(set(output))
-
-
-# =========================================================
-# ÜRÜN ALÂKASI
-# =========================================================
-
-def relevance(product, text):
-
-    product_words = words_of(product)
-
-    if not product_words:
-        return 0
-
-    text = normalize(text)
-
-    score = 0
-
-    for word in product_words:
-
-        if word in text:
-            score += 1
-
-    return score
-
-
-def relevant(product, title, description=""):
-
-    combined = (
-        str(title)
-        + " "
-        + str(description)
+    return sorted(
+        set(prices)
     )
-
-    score = relevance(
-        product,
-        combined
-    )
-
-    total = len(
-        words_of(product)
-    )
-
-    if total >= 4:
-        return score >= 3
-
-    if total == 3:
-        return score >= 2
-
-    if total == 2:
-        return score >= 2
-
-    return score >= 1
 
 
 # =========================================================
@@ -433,7 +507,10 @@ def api_get(
 
         data = response.json()
 
-        if not data.get("success"):
+        if not data.get(
+            "success",
+            False
+        ):
             return None
 
         return data
@@ -444,37 +521,14 @@ def api_get(
 
 
 # =========================================================
-# GOOGLE SEARCH
-# =========================================================
-
-def google_search(query):
-
-    data = api_get(
-        "/v1/google/search",
-        {
-            "query": query,
-            "region": "TR",
-            "page": 1
-        }
-    )
-
-    if not data:
-        return []
-
-    return (
-        data
-        .get("data", {})
-        .get("items", [])
-    )
-
-
-# =========================================================
 # GOOGLE SHOPPING
 # =========================================================
 
-def shopping_search(product):
+def google_shopping_search(
+    product
+):
 
-    data = api_get(
+    return api_get(
         "/v1/google_shopping/product-search",
         {
             "query": product,
@@ -486,26 +540,79 @@ def shopping_search(product):
         timeout=150
     )
 
-    if not data:
-        return []
 
-    return (
-        data
-        .get("data", {})
-        .get("items", [])
+# =========================================================
+# SHOPPING SELLERS
+# =========================================================
+
+def google_shopping_sellers(
+    product_id=None,
+    gid=None,
+    data_docid=None
+):
+
+    params = {
+        "country": "Turkey",
+        "language": "tr"
+    }
+
+    if product_id:
+        params["product_id"] = product_id
+
+    elif gid:
+        params["gid"] = gid
+
+    elif data_docid:
+        params["data_docid"] = data_docid
+
+    else:
+        return None
+
+    return api_get(
+        "/v1/google_shopping/sellers",
+        params,
+        timeout=90
     )
 
 
 # =========================================================
-# SHOPPING SONUÇLARI
+# GOOGLE SEARCH
+# =========================================================
+
+def google_search(
+    query
+):
+
+    return api_get(
+        "/v1/google/search",
+        {
+            "query": query,
+            "region": "TR",
+            "page": 1
+        },
+        timeout=90
+    )
+
+
+# =========================================================
+# SHOPPING SONUÇLARINI PARSE ET
 # =========================================================
 
 def parse_shopping(
-    items,
+    data,
     product
 ):
 
     results = []
+
+    if not data:
+        return results
+
+    items = (
+        data
+        .get("data", {})
+        .get("items", [])
+    )
 
     for row in items:
 
@@ -524,7 +631,7 @@ def parse_shopping(
             ""
         )
 
-        if not relevant(
+        if not is_relevant(
             product,
             title,
             description
@@ -542,19 +649,12 @@ def parse_shopping(
         ):
             continue
 
-        price = price_data.get(
-            "current"
-        )
-
         currency = str(
             price_data.get(
                 "currency",
                 ""
             )
         ).upper()
-
-        if price is None:
-            continue
 
         if currency not in {
             "TRY",
@@ -563,9 +663,23 @@ def parse_shopping(
             continue
 
         try:
-            price = float(price)
+
+            price = float(
+                price_data.get(
+                    "current"
+                )
+            )
+
         except Exception:
             continue
+
+        if price <= 0:
+            continue
+
+        ext = p.get(
+            "ext",
+            {}
+        )
 
         results.append({
 
@@ -573,7 +687,7 @@ def parse_shopping(
 
             "price": price,
 
-            "seller": (
+            "store": (
                 p.get("seller")
                 or "Mağaza"
             ),
@@ -587,18 +701,16 @@ def parse_shopping(
 
             "source": "Google Shopping",
 
-            "gid": (
-                p.get("ext", {})
-                .get("gid")
-            ),
-
             "product_id": p.get(
                 "id"
             ),
 
-            "data_docid": (
-                p.get("ext", {})
-                .get("data_docid")
+            "gid": ext.get(
+                "gid"
+            ),
+
+            "data_docid": ext.get(
+                "data_docid"
             )
         })
 
@@ -606,161 +718,160 @@ def parse_shopping(
 
 
 # =========================================================
-# SHOPPING SATICILARI
+# SELLER SONUÇLARINI ESNEK PARSE ET
 # =========================================================
 
-def shopping_sellers(item):
+def parse_sellers(
+    data,
+    product
+):
 
-    gid = item.get(
-        "gid"
-    )
-
-    if not gid:
-        return []
-
-    params = {
-        "gid": gid,
-        "country": "Turkey",
-        "language": "tr"
-    }
-
-    if item.get("product_id"):
-        params["product_id"] = item["product_id"]
-
-    if item.get("data_docid"):
-        params["data_docid"] = item["data_docid"]
-
-    data = api_get(
-        "/v1/google_shopping/sellers",
-        params,
-        timeout=90
-    )
+    results = []
 
     if not data:
-        return []
+        return results
 
-    return (
+    items = (
         data
         .get("data", {})
         .get("items", [])
     )
 
+    for row in items:
 
-# =========================================================
-# SELLER JSON'UNDAN FİYAT BUL
-# =========================================================
+        # Seller satırlarında API yapısı
+        # değişebileceği için birkaç alanı
+        # kontrol ediyoruz.
 
-def parse_seller_item(
-    row,
-    product
-):
-
-    # API'nin döndürdüğü olası yapıları
-    # esnek biçimde kontrol ediyoruz.
-
-    obj = row
-
-    if isinstance(
-        row.get("seller"),
-        dict
-    ):
-        obj = row["seller"]
-
-    title = (
-        obj.get("title")
-        or obj.get("name")
-        or product
-    )
-
-    seller = (
-        obj.get("seller")
-        or obj.get("merchant")
-        or obj.get("store")
-        or obj.get("seller_name")
-        or "Mağaza"
-    )
-
-    url = (
-        obj.get("url")
-        or obj.get("link")
-        or ""
-    )
-
-    price_data = obj.get(
-        "price"
-    )
-
-    price = None
-
-    if isinstance(
-        price_data,
-        dict
-    ):
-
-        price = (
-            price_data.get("current")
-            or price_data.get("value")
+        title = (
+            row.get("title")
+            or row.get("product_title")
+            or product
         )
 
-    elif price_data is not None:
-
-        price = price_data
-
-    if price is None:
-
-        price = (
-            obj.get("current_price")
-            or obj.get("price_current")
-            or obj.get("amount")
+        store = (
+            row.get("seller")
+            or row.get("merchant")
+            or row.get("store")
+            or row.get("seller_name")
+            or row.get("merchant_name")
+            or "Mağaza"
         )
 
-    try:
-
-        price = float(price)
-
-    except Exception:
-
-        # Son çare bütün objeyi yazıya çevir
-        prices = extract_prices(
-            str(row)
+        url = (
+            row.get("url")
+            or row.get("link")
+            or row.get("offer_url")
+            or ""
         )
 
-        if not prices:
-            return None
+        price = None
 
-        price = min(prices)
+        price_data = row.get(
+            "price"
+        )
 
-    if price <= 0:
-        return None
+        if isinstance(
+            price_data,
+            dict
+        ):
 
-    return {
+            price = (
+                price_data.get(
+                    "current"
+                )
+                or price_data.get(
+                    "value"
+                )
+                or price_data.get(
+                    "amount"
+                )
+            )
 
-        "title": str(title),
+        elif price_data is not None:
 
-        "price": price,
+            price = price_data
 
-        "seller": str(seller),
+        if price is None:
 
-        "url": str(url),
+            price = (
+                row.get(
+                    "current_price"
+                )
+                or row.get(
+                    "price_current"
+                )
+                or row.get(
+                    "amount"
+                )
+                or row.get(
+                    "offer_price"
+                )
+            )
 
-        "condition": "Sıfır",
+        try:
 
-        "source": "Google Shopping"
+            price = float(
+                price
+            )
 
-    }
+        except Exception:
+
+            prices = extract_prices(
+                str(row)
+            )
+
+            if prices:
+
+                price = min(
+                    prices
+                )
+
+        if price is None:
+            continue
+
+        if price <= 0:
+            continue
+
+        results.append({
+
+            "title": title,
+
+            "price": price,
+
+            "store": store,
+
+            "url": url,
+
+            "condition": "Sıfır",
+
+            "source": "Google Shopping • Satıcı"
+        })
+
+    return results
 
 
 # =========================================================
-# GOOGLE SEARCH SONUÇLARI
+# GOOGLE SEARCH PARSE
 # =========================================================
 
-def parse_google(
-    items,
+def parse_google_results(
+    data,
     product,
-    condition
+    condition,
+    allowed_domains=None
 ):
 
     results = []
+
+    if not data:
+        return results
+
+    items = (
+        data
+        .get("data", {})
+        .get("items", [])
+    )
 
     for row in items:
 
@@ -779,28 +890,31 @@ def parse_google(
             ""
         )
 
-        if not relevant(
+        domain = get_domain(
+            url
+        )
+
+        if allowed_domains:
+
+            if domain not in allowed_domains:
+                continue
+
+        if not is_relevant(
             product,
             title,
             snippet
         ):
             continue
 
-        combined = (
-            title
-            + " "
-            + snippet
-        )
-
         prices = extract_prices(
-            combined
+            str(title)
+            + " "
+            + str(snippet)
         )
 
         if not prices:
             continue
 
-        # İlan/fiyat sayfasında bulunan
-        # en düşük fiyatı al.
         price = min(
             prices
         )
@@ -811,7 +925,7 @@ def parse_google(
 
             "price": price,
 
-            "seller": store_name(
+            "store": get_store_name(
                 url
             ),
 
@@ -820,111 +934,149 @@ def parse_google(
             "condition": condition,
 
             "source": "Google Search"
-
         })
 
     return results
 
 
 # =========================================================
-# KAYNAK ARA
+# KAYNAK ARAMA
 # =========================================================
 
-def search_source(
+def search_site(
     product,
     domain,
     condition,
-    words=""
+    extra=""
 ):
 
     query = (
         f'"{product}" '
         f'site:{domain} '
-        f'{words}'
+        f'{extra}'
     ).strip()
 
-    items = google_search(
+    data = google_search(
         query
     )
 
-    return parse_google(
-        items,
+    return parse_google_results(
+        data,
         product,
-        condition
+        condition,
+        {domain}
     )
 
 
 # =========================================================
-# SIFIR
+# SIFIR ÜRÜNLER
 # =========================================================
 
-def search_new(product):
+def search_new(
+    product,
+    diagnostics
+):
 
     results = []
 
-    # -----------------------------------------
+    # -----------------------------
     # Google Shopping
-    # -----------------------------------------
+    # -----------------------------
 
-    shopping_items = shopping_search(
-        product
+    shopping_data = (
+        google_shopping_search(
+            product
+        )
     )
 
     shopping_results = parse_shopping(
-        shopping_items,
+        shopping_data,
         product
+    )
+
+    diagnostics[
+        "Google Shopping"
+    ] = len(
+        shopping_results
     )
 
     results.extend(
         shopping_results
     )
 
-    # -----------------------------------------
-    # Shopping seller teklifleri
-    # İlk 5 uygun ürün için
-    # -----------------------------------------
+    # -----------------------------
+    # SELLERS
+    # -----------------------------
 
-    for item in shopping_results[:5]:
+    seller_count = 0
 
-        sellers = shopping_sellers(
-            item
+    # En fazla ilk 10 gerçek
+    # ürün için satıcıları çek.
+
+    for item in shopping_results[:10]:
+
+        seller_data = (
+            google_shopping_sellers(
+                product_id=item.get(
+                    "product_id"
+                ),
+                gid=item.get(
+                    "gid"
+                ),
+                data_docid=item.get(
+                    "data_docid"
+                )
+            )
         )
 
-        for seller_row in sellers:
+        seller_results = parse_sellers(
+            seller_data,
+            product
+        )
 
-            parsed = parse_seller_item(
-                seller_row,
-                product
-            )
+        seller_count += len(
+            seller_results
+        )
 
-            if parsed:
+        results.extend(
+            seller_results
+        )
 
-                results.append(
-                    parsed
-                )
+    diagnostics[
+        "Shopping Satıcıları"
+    ] = seller_count
 
-    # -----------------------------------------
-    # Google Search mağazaları
-    # -----------------------------------------
+    # -----------------------------
+    # MAĞAZA KAYNAKLARI
+    # -----------------------------
 
     domains = [
+
         "akakce.com",
+
         "cimri.com",
+
         "hepsiburada.com",
+
         "trendyol.com",
+
         "n11.com",
-        "amazon.com.tr",
-        "grundig.com.tr"
+
+        "amazon.com.tr"
     ]
 
     for domain in domains:
 
-        found = search_source(
+        found = search_site(
             product,
             domain,
             "Sıfır",
             "fiyat"
         )
+
+        diagnostics[
+            domain
+        ] = len(found)
 
         results.extend(
             found
@@ -939,70 +1091,50 @@ def search_new(product):
 # İKİNCİ EL
 # =========================================================
 
-def search_used(product):
+def search_used(
+    product,
+    diagnostics
+):
 
     results = []
 
     domains = [
+
         "dolap.com",
+
         "sahibinden.com",
+
         "letgo.com"
     ]
 
     for domain in domains:
 
-        variants = [
-            "",
+        total = 0
+
+        for extra in [
             "ikinci el",
-            "2.el"
-        ]
+            "2.el",
+            ""
+        ]:
 
-        for variant in variants:
-
-            found = search_source(
+            found = search_site(
                 product,
                 domain,
                 "İkinci El",
-                variant
+                extra
+            )
+
+            total += len(
+                found
             )
 
             results.extend(
                 found
             )
 
-    # Genel Google araması
-    # Sadece ikinci el sitelerini kabul ediyoruz.
-
-    for query in [
-        f'"{product}" ikinci el',
-        f'"{product}" 2.el'
-    ]:
-
-        items = google_search(
-            query
-        )
-
-        parsed = parse_google(
-            items,
-            product,
-            "İkinci El"
-        )
-
-        for item in parsed:
-
-            domain = domain_of(
-                item["url"]
-            )
-
-            if domain in {
-                "dolap.com",
-                "sahibinden.com",
-                "letgo.com"
-            }:
-
-                results.append(
-                    item
-                )
+        diagnostics[
+            domain
+        ] = total
 
     return clean_results(
         results
@@ -1013,76 +1145,52 @@ def search_used(product):
 # YENİLENMİŞ
 # =========================================================
 
-def search_refurbished(product):
+def search_refurbished(
+    product,
+    diagnostics
+):
 
     results = []
 
     domains = [
-        "hepsiburada.com",
-        "trendyol.com",
-        "n11.com",
-        "amazon.com.tr"
-    ]
 
-    variants = [
-        "yenilenmiş",
-        "refurbished",
-        "renewed"
+        "hepsiburada.com",
+
+        "trendyol.com",
+
+        "n11.com",
+
+        "amazon.com.tr"
     ]
 
     for domain in domains:
 
-        for variant in variants:
+        total = 0
 
-            found = search_source(
+        for extra in [
+            "yenilenmiş",
+            "refurbished",
+            "renewed"
+        ]:
+
+            found = search_site(
                 product,
                 domain,
                 "Yenilenmiş",
-                variant
+                extra
+            )
+
+            total += len(
+                found
             )
 
             results.extend(
                 found
             )
 
-    # Genel arama
-
-    for variant in variants:
-
-        query = (
-            f'"{product}" {variant}'
-        )
-
-        items = google_search(
-            query
-        )
-
-        parsed = parse_google(
-            items,
-            product,
-            "Yenilenmiş"
-        )
-
-        for item in parsed:
-
-            text = normalize(
-                item["title"]
-                + " "
-                + item["seller"]
-            )
-
-            if any(
-                word in text
-                for word in [
-                    "yenilenmis",
-                    "refurbished",
-                    "renewed"
-                ]
-            ):
-
-                results.append(
-                    item
-                )
+        diagnostics[
+            "Yenilenmiş: " + domain
+        ] = total
 
     return clean_results(
         results
@@ -1093,16 +1201,20 @@ def search_refurbished(product):
 # TEMİZLE
 # =========================================================
 
-def clean_results(results):
+def clean_results(
+    results
+):
 
     unique = {}
 
     for item in results:
 
         try:
+
             price = float(
                 item["price"]
             )
+
         except Exception:
             continue
 
@@ -1116,20 +1228,20 @@ def clean_results(results):
             )
         )
 
-        seller = normalize(
+        store = normalize(
             item.get(
-                "seller",
+                "store",
                 ""
             )
         )
 
-        url = item.get(
-            "url",
+        condition = item.get(
+            "condition",
             ""
         )
 
-        condition = item.get(
-            "condition",
+        url = item.get(
+            "url",
             ""
         )
 
@@ -1144,7 +1256,7 @@ def clean_results(results):
 
             key = (
                 title,
-                seller,
+                store,
                 round(price, 2),
                 condition
             )
@@ -1167,86 +1279,12 @@ def clean_results(results):
 
 
 # =========================================================
-# KATEGORİ GÖSTER
-# =========================================================
-
-def show_category(
-    title,
-    icon,
-    results,
-    css
-):
-
-    st.subheader(
-        f"{icon} {title}"
-    )
-
-    if not results:
-
-        st.markdown(
-            '<div class="empty-box">'
-            'Bu kategoride uygun fiyatlı sonuç bulunamadı.'
-            '</div>',
-            unsafe_allow_html=True
-        )
-
-        return
-
-    for index, item in enumerate(
-        results[:30],
-        1
-    ):
-
-        title_html = html.escape(
-            item["title"]
-        )
-
-        seller_html = html.escape(
-            item["seller"]
-        )
-
-        condition_html = html.escape(
-            item["condition"]
-        )
-
-        st.markdown(
-            f"""
-            <div class="offer {css}">
-
-                <div class="offer-title">
-                    {index}. {title_html}
-                </div>
-
-                <div class="offer-price">
-                    {item["price"]:,.2f} TL
-                </div>
-
-                <div class="offer-store">
-                    🏪 {seller_html}
-                </div>
-
-                <div class="offer-condition">
-                    📦 {condition_html}
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        if item.get("url"):
-
-            st.link_button(
-                "🛒 Sonuca Git",
-                item["url"]
-            )
-
-
-# =========================================================
 # EN UCUZ
 # =========================================================
 
-def show_best(results):
+def show_best(
+    results
+):
 
     if not results:
         return
@@ -1260,8 +1298,8 @@ def show_best(results):
         cheapest["title"]
     )
 
-    seller = html.escape(
-        cheapest["seller"]
+    store = html.escape(
+        cheapest["store"]
     )
 
     condition = html.escape(
@@ -1285,7 +1323,7 @@ def show_best(results):
             </div>
 
             <div class="best-store">
-                🏪 {seller}
+                🏪 {store}
             </div>
 
             <div class="best-condition">
@@ -1297,12 +1335,90 @@ def show_best(results):
         unsafe_allow_html=True
     )
 
-    if cheapest.get("url"):
+    if cheapest.get(
+        "url"
+    ):
 
         st.link_button(
             "🛒 En Ucuz Sonuca Git",
             cheapest["url"]
         )
+
+
+# =========================================================
+# KATEGORİ GÖSTER
+# =========================================================
+
+def show_category(
+    title,
+    icon,
+    results,
+    css
+):
+
+    st.subheader(
+        f"{icon} {title}"
+    )
+
+    if not results:
+
+        st.info(
+            "Bu kategoride doğrulanmış "
+            "fiyatlı sonuç bulunamadı."
+        )
+
+        return
+
+    for index, item in enumerate(
+        results[:25],
+        1
+    ):
+
+        title_html = html.escape(
+            item["title"]
+        )
+
+        store_html = html.escape(
+            item["store"]
+        )
+
+        condition_html = html.escape(
+            item["condition"]
+        )
+
+        st.markdown(
+            f"""
+            <div class="offer {css}">
+
+                <div class="offer-title">
+                    {index}. {title_html}
+                </div>
+
+                <div class="offer-price">
+                    {item["price"]:,.2f} TL
+                </div>
+
+                <div class="offer-store">
+                    🏪 {store_html}
+                </div>
+
+                <div class="offer-condition">
+                    📦 {condition_html}
+                </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        if item.get(
+            "url"
+        ):
+
+            st.link_button(
+                "🛒 Ürüne Git",
+                item["url"]
+            )
 
 
 # =========================================================
@@ -1314,7 +1430,7 @@ if search_button:
     if not product.strip():
 
         st.warning(
-            "Önce ürün adını yaz."
+            "Lütfen ürün adı yaz."
         )
 
         st.stop()
@@ -1326,16 +1442,18 @@ if search_button:
         )
 
         st.info(
-            "Streamlit Secrets bölümüne "
-            "SOCIALCRAWL_API_KEY ekle."
+            "Streamlit → Settings → Secrets "
+            "bölümüne API anahtarını ekle."
         )
 
         st.stop()
 
     product = product.strip()
 
+    diagnostics = {}
+
     st.info(
-        f"🔎 **{product}** için tüm kaynaklar taranıyor..."
+        f"🔎 **{product}** için kaynaklar taranıyor..."
     )
 
     progress = st.progress(
@@ -1344,48 +1462,51 @@ if search_button:
 
     status = st.empty()
 
-    # -----------------------------------------------------
+    # -----------------------------
     # SIFIR
-    # -----------------------------------------------------
+    # -----------------------------
 
     status.write(
-        "🟢 Sıfır ürünler ve mağazalar aranıyor..."
+        "🟢 Mağazalar ve Google Shopping taranıyor..."
     )
 
     new_results = search_new(
-        product
+        product,
+        diagnostics
     )
 
     progress.progress(
-        35
+        40
     )
 
-    # -----------------------------------------------------
+    # -----------------------------
     # İKİNCİ EL
-    # -----------------------------------------------------
+    # -----------------------------
 
     status.write(
-        "🟠 Dolap, Sahibinden ve Letgo aranıyor..."
+        "🟠 Dolap, Sahibinden ve Letgo taranıyor..."
     )
 
     used_results = search_used(
-        product
+        product,
+        diagnostics
     )
 
     progress.progress(
         70
     )
 
-    # -----------------------------------------------------
+    # -----------------------------
     # YENİLENMİŞ
-    # -----------------------------------------------------
+    # -----------------------------
 
     status.write(
-        "🔵 Yenilenmiş ürünler aranıyor..."
+        "🔵 Yenilenmiş ürünler taranıyor..."
     )
 
     refurb_results = search_refurbished(
-        product
+        product,
+        diagnostics
     )
 
     progress.progress(
@@ -1395,21 +1516,9 @@ if search_button:
     progress.empty()
     status.empty()
 
-    # -----------------------------------------------------
-    # TÜMÜ
-    # -----------------------------------------------------
-
-    new_results = clean_results(
-        new_results
-    )
-
-    used_results = clean_results(
-        used_results
-    )
-
-    refurb_results = clean_results(
-        refurb_results
-    )
+    # -----------------------------
+    # TÜM SONUÇLAR
+    # -----------------------------
 
     all_results = clean_results(
         new_results
@@ -1417,86 +1526,115 @@ if search_button:
         + refurb_results
     )
 
-    # -----------------------------------------------------
+    # =====================================================
+    # KAYNAK TEŞHİS
+    # =====================================================
+
+    with st.expander(
+        "🔧 Arama kaynakları",
+        expanded=False
+    ):
+
+        st.write(
+            "Bu bölüm hangi kaynaktan gerçekten "
+            "kaç fiyat geldiğini gösterir."
+        )
+
+        for source, count in diagnostics.items():
+
+            st.markdown(
+                f"""
+                <div class="source-card">
+                    <b>{html.escape(str(source))}</b>
+                    :
+                    {count} fiyatlı sonuç
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    # =====================================================
     # SONUÇ YOK
-    # -----------------------------------------------------
+    # =====================================================
 
     if not all_results:
 
         st.error(
-            f'"{product}" için fiyatlı sonuç bulunamadı.'
+            f'"{product}" için doğrulanmış '
+            f'fiyat bulunamadı.'
         )
 
         st.stop()
 
-    # -----------------------------------------------------
+    # =====================================================
     # EN UCUZ
-    # -----------------------------------------------------
+    # =====================================================
 
     show_best(
         all_results
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # ÖZET
-    # -----------------------------------------------------
+    # =====================================================
 
     st.divider()
 
-    c1, c2, c3, c4 = st.columns(4)
+    col1, col2, col3, col4 = st.columns(4)
 
-    with c1:
+    with col1:
 
         st.metric(
             "🟢 Sıfır",
             len(new_results)
         )
 
-    with c2:
+    with col2:
 
         st.metric(
             "🟠 İkinci El",
             len(used_results)
         )
 
-    with c3:
+    with col3:
 
         st.metric(
             "🔵 Yenilenmiş",
             len(refurb_results)
         )
 
-    with c4:
+    with col4:
 
         st.metric(
             "💰 Toplam",
             len(all_results)
         )
 
-    # -----------------------------------------------------
-    # FİYAT FARKI
-    # -----------------------------------------------------
+    # =====================================================
+    # FİYAT ARALIĞI
+    # =====================================================
 
     if len(all_results) >= 2:
 
-        low = min(
+        cheapest_price = min(
             x["price"]
             for x in all_results
         )
 
-        high = max(
+        highest_price = max(
             x["price"]
             for x in all_results
         )
 
         st.info(
-            f"💰 Fiyat aralığı: "
-            f"**{low:,.2f} TL – {high:,.2f} TL**"
+            f"💰 Bulunan fiyat aralığı: "
+            f"**{cheapest_price:,.2f} TL** — "
+            f"**{highest_price:,.2f} TL**"
         )
 
-    # -----------------------------------------------------
-    # KATEGORİLER
-    # -----------------------------------------------------
+    # =====================================================
+    # SONUÇLAR
+    # =====================================================
 
     st.divider()
 
