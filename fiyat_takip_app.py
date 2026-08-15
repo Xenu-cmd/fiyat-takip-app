@@ -142,17 +142,21 @@ def search_socialcrawl(product):
     )
 
 
-    params = {
+params = {
 
-        "query": product,
+    "query": product,
 
-        "country": "Turkey",
+    "country": "Turkey",
 
-        "language": "tr",
+    "language": "tr",
 
-        "depth": 40
+    "depth": 40,
 
-    }
+    "sort_by": "price_low_to_high"
+
+}
+
+
 
 
     headers = {
